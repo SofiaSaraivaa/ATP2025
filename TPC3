@@ -1,0 +1,113 @@
+import random 
+
+def ListaAleatoria():
+    N = int(input("Quantos elementos quer na sua lista?"))
+    lista1 = []
+    i = 1 
+    while i <= N: 
+        x = random.randrange(1,101)
+        lista1.append(x)
+        i = i + 1
+    return lista1
+
+def ListaUtilizador(): 
+    N = int(input("Quantos elementos quer na sua lista?"))
+    lista2 = []
+    i = 1
+    while i <= N: 
+        x = int(input(f"Escolha o número {i}/{N}"))
+        lista2.append(x)
+        i = i + 1
+    return lista2
+
+def Soma(lista): 
+    soma = 0 
+    for x in lista: 
+        soma = soma + x
+    return soma
+
+def Media(lista): 
+    soma = 0 
+    for x in lista: 
+        soma = soma + x
+        media = soma / len(lista)
+    return media
+
+def Maior(lista): 
+    maior = lista[0]
+    for x in lista: 
+        if x >= maior: 
+            maior = x
+    return maior
+
+def Menor(lista): 
+    menor = lista[0]
+    for x in lista: 
+        if x <= menor: 
+            menor = x
+    return menor
+
+def Crescente(lista): 
+    lista3 = sorted(lista)
+    if lista3 == lista: 
+        return "Sim"
+    return "Não"
+
+def Decrescente(lista): 
+    lista4 = lista.copy()
+    lista4.sort()
+    lista4.reverse()
+    if lista4 == lista: 
+        return "Sim"
+    return "Não"
+
+def Menu():
+    print("""Escolha o número da operação que deseja realizar.
+1) Criar Lista
+2) Ler Lista
+3) Soma
+4) Média
+5) Maior
+6) Menor
+7) Está ordenada por ordem crescente
+8) Está ordenada por ordem decrescente
+9) Procura um elemento
+0) Sair""")
+    
+    x = int(input(""))
+    while x != 0: 
+        if x == 1:
+            listautil = ListaAleatoria()
+            print (listautil)
+        elif x == 2:
+            listautil = ListaUtilizador()
+            print(listautil)
+        elif x == 3: 
+            print(Soma(listautil))
+        elif x == 4:
+            print(Media(listautil))
+        elif x == 5:
+            print(Maior(listautil))
+        elif x == 6:
+            print(Menor(listautil))
+        elif x == 7:
+            print(Crescente(listautil))
+        elif x == 8:
+            print(Decrescente(listautil))
+
+        print("""Escolha o número da operação que deseja realizar.
+        1) Criar Lista
+        2) Ler Lista
+        3) Soma
+        4) Média
+        5) Maior
+        6) Menor
+        7) Está ordenada por ordem crescente
+        8) Está ordenada por ordem decrescente
+        9) Procura um elemento
+        0) Sair""")
+        x = int(input(""))
+
+    return print("Ok, adeus!")
+
+Menu()
