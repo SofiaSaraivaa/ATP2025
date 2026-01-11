@@ -1,0 +1,52 @@
+[
+  {
+    "id": "d001",
+    "name": "Dr. João Silva",
+    "specialty": "Cardiologia"
+  },
+  {
+    "id": "d002",
+    "name": "Dr. Bruno Belo",
+    "specialty": "Pediatria"
+  },
+  {
+    "id": "d003",
+    "name": "Dra. Clara Costa",
+    "specialty": "Nefrologia"
+  },
+  {
+    "id": "d004",
+    "name": "Dr. David Dias",
+    "specialty": "Cardiologia"
+  },
+  {
+    "id": "d005",
+    "name": "Dra. Elena Esteves",
+    "specialty": "Endocrinologia"
+  },
+  {
+    "id": "d006",
+    "name": "Dr. Fábio Faria",
+    "specialty": "Cardiologia"
+  },
+  {
+    "id": "d007",
+    "name": "Dra. Gina Gomes",
+    "specialty": "Endocrinologia"
+  },
+  {
+    "id": "d008",
+    "name": "Dr. Hugo Henriques",
+    "specialty": "Pediatria"
+  },
+  {
+    "id": "d009",
+    "name": "Dr. Ivan Ivo",
+    "specialty": "Nefrologia"
+  },
+  {
+    "id": "d010",
+    "name": "Dra. Júlia Jorge",
+    "specialty": "Pediatria"
+  }
+]
