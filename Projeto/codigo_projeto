@@ -1,0 +1,712 @@
+import FreeSimpleGUI as sg
+import json, time, numpy, queue
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+
+#############################################################################
+################################# BACKEND ###################################
+#############################################################################
+
+UNCHANGED_PATIENTS = []
+lista_pacientes = []
+UNCHANGED_MEDICOS = []
+lista_medicos=[] 
+lista_filachegada = []  
+lista_filaespera = [] 
+lista_consultas_atuais = [] 
+lista_historico_consultas = [] 
+
+with open('./patients.json', 'r', encoding='utf-8') as f:
+    lista_pacientes = json.load(f)
+    UNCHANGED_PATIENTS = lista_pacientes.copy()
+
+with open('./doctors.json', 'r', encoding='utf-8') as f:
+    UNCHANGED_MEDICOS = json.load(f)
+
+
+#Parâmetros
+# 1 s = 10 min
+DISTRIBUICAO_TEMPO_CONSULTA = "normal"
+INICIO_SIMULACAO = time.time()
+LAST_TICK = INICIO_SIMULACAO 
+TEMPO_ATUAL_SIMULACAO = 0  
+NEXT_ARRIVAL = 0
+SIMULATION_RUNNING = False
+ESCALA_TEMPO = 10
+USERNAME_CORRETO = "admin"
+PASSWORD_CORRETO = "1234"
+
+#Estatísticas
+fila_maxima = 0 
+fila_historico = [] 
+fila_media = 0 
+tempoespera_media = 0  
+tempoconsulta_media = 0 
+tempoclinica_media = 0 
+pacientes_atendidos = 0
+ocupacaomedico_media = 0.0 
+ocupacaomedico_portempo = []
+
+
+def reset_simulacao():
+    global lista_pacientes, lista_medicos, lista_filachegada, lista_filaespera, lista_consultas_atuais, lista_historico_consultas
+    global INICIO_SIMULACAO, LAST_TICK, TEMPO_ATUAL_SIMULACAO, NEXT_ARRIVAL
+    global fila_maxima, fila_historico, fila_media, tempoespera_media, tempoconsulta_media, tempoclinica_media, pacientes_atendidos, ocupacaomedico_media, ocupacaomedico_portempo
+
+    lista_pacientes = UNCHANGED_PATIENTS
+    lista_medicos = UNCHANGED_MEDICOS[:NUM_MEDICOS]
+    lista_filachegada = []
+    lista_filaespera = []
+    lista_consultas_atuais = []
+    lista_historico_consultas = []
+
+    INICIO_SIMULACAO = time.time()
+    LAST_TICK = INICIO_SIMULACAO 
+    TEMPO_ATUAL_SIMULACAO = 0  
+    NEXT_ARRIVAL = 0
+
+    fila_maxima = 0 
+    fila_historico = [] 
+    fila_media = 0 
+    tempoespera_media = 0  
+    tempoconsulta_media = 0 
+    tempoclinica_media = 0 
+    pacientes_atendidos = 0
+    ocupacaomedico_media = 0.0 
+    ocupacaomedico_portempo = []
+
+
+def is_number(x):
+    return isinstance(x, (int, float))
+
+def estado_consultorio():
+    global lista_consultas_atuais, lista_medicos
+    consultorio = []
+    for m in lista_medicos:
+        if not any(c for c in lista_consultas_atuais if c["idDoctor"] == m["id"]):
+            consultorio.append({
+                "idPatient": "N/A",
+                "patientName": "Nenhum",
+                "idDoctor": m["id"],
+                "doctorName": m["name"],
+                "start": "N/A",
+                "arrival": "N/A",
+                "end": "N/A",
+                "illness": m["specialty"]
+            })
+    
+    for c in lista_consultas_atuais:
+        consultorio.append(c)
+
+    consultorio_sorted = sorted(consultorio, key=lambda u: u["idDoctor"])
+
+    return consultorio_sorted
+
+def definir_cor_linhas():
+    lista = estado_consultorio()
+    cor_linhas = []
+    for i in lista:    
+        if i["patientName"] == "Nenhum":
+            cor_linhas.append((lista.index(i), "white", "green"))
+    return cor_linhas
+
+
+def calc_filaespera(): 
+    global lista_filaespera, fila_maxima, fila_media, fila_historico, LAST_TICK, tempoespera_media, lista_historico_consultas, TEMPO_ATUAL_SIMULACAO
+    if len(lista_filaespera) > fila_maxima:
+        fila_maxima = len(lista_filaespera)
+    fila_historico.append((len(lista_filaespera), TEMPO_ATUAL_SIMULACAO - LAST_TICK))
+    fila_media = sum(size * duration for size, duration in fila_historico) / (TEMPO_ATUAL_SIMULACAO - INICIO_SIMULACAO)
+    tempoespera_media = sum((patient["start"] - patient["arrival"]) for patient in lista_historico_consultas) / len(lista_historico_consultas) if lista_historico_consultas else 0
+    LAST_TICK = TEMPO_ATUAL_SIMULACAO
+
+def calc_consultas(): 
+    global lista_consultas_atuais, tempoconsulta_media, tempoclinica_media, lista_historico_consultas, pacientes_atendidos, ocupacaomedico_media
+    tempoconsulta_media = sum((record["duration"] for record in lista_historico_consultas)) / len(lista_historico_consultas) if lista_historico_consultas else 0
+    tempoclinica_media = sum((record["exit"] - record["arrival"] for record in lista_historico_consultas)) / len(lista_historico_consultas) if lista_historico_consultas else 0
+    pacientes_atendidos = len(lista_historico_consultas)
+    ocupacaomedico_media = calc_ocupacaomedicos()
+
+def calc_ocupacaomedicos():
+    tempo_total_consultas = 0.0
+
+    tempo_total_consultas = sum(r["duration"] for r in lista_historico_consultas)
+    for c in lista_consultas_atuais:
+        tempo_total_consultas += max(0, min(TEMPO_ATUAL_SIMULACAO, c["end"]) - c["start"])
+    tempo_total_disponivel = NUM_MEDICOS * DURACAO_SIMULACAO/ESCALA_TEMPO
+
+    #print((tempo_total_consultas / tempo_total_disponivel) * 100 )
+
+    ocupacao = (tempo_total_consultas / tempo_total_disponivel) * 100
+    return min(ocupacao, 100.0)
+
+def calc_OM2():
+    global ocupacaomedico_portempo
+    ocupacaomedico_portempo.append((TEMPO_ATUAL_SIMULACAO - INICIO_SIMULACAO, len(lista_consultas_atuais)))
+
+
+#Tipo de distribuição (exponential, normal, uniform)
+
+def distribuicao_uniforme():   
+    return round(numpy.random.uniform(low=TAXA_CHEGADA-5, high=TAXA_CHEGADA+5) / ESCALA_TEMPO)
+
+
+def distribuicao_normal():
+    return round(numpy.random.normal(loc=TAXA_CHEGADA, scale=5) / ESCALA_TEMPO)
+
+
+def distribuicao_exponencial():
+    return round(numpy.random.exponential(scale=TAXA_CHEGADA) / ESCALA_TEMPO)
+
+def calcular_proxima_chegada(modo):
+    res = 0
+    if modo == "exponential":
+        res = distribuicao_exponencial()
+    elif modo == "uniform":
+        res = distribuicao_uniforme()
+    elif modo == "normal":
+        res = distribuicao_normal()
+    
+    return res
+
+
+def tentar_aceitar_paciente(paciente, arrivalTime, daFilaDeEspera = False ): #Tenta aceitar um paciente diretamente, se não houver vaga, coloca na fila de espera
+    global lista_medicos, lista_consultas_atuais, TEMPO_ATUAL_SIMULACAO, TEMPO_MEDIO_CONSULTA, lista_filaespera
+    #print("attempting to accept patient ", patient["id"])
+    if not daFilaDeEspera:
+        for m in lista_medicos:
+            if m["specialty"] == paciente["illness"]: #Procurar um médico com a especialidade correta
+                if not any(c for c in lista_consultas_atuais if c["idDoctor"] == m["id"]): #Verificar se esse médico está livre (não tem consulta ativa)
+                    lista_consultas_atuais.append({ #Se encontrar - cria consulta
+                        "idPatient": paciente["id"],
+                        "patientName": paciente["name"],
+                        "idDoctor": m["id"],
+                        "doctorName": m["name"],
+                        "start": TEMPO_ATUAL_SIMULACAO,
+                        "arrival": arrivalTime,
+                        "end": TEMPO_ATUAL_SIMULACAO + round(numpy.random.normal(loc=TEMPO_MEDIO_CONSULTA, scale=7)),
+                        "illness": paciente["illness"]
+                    })
+                    print("accepted patient ", paciente["id"], " with doctor ", m["id"])
+                    print("current consultations: ", lista_consultas_atuais)
+                    return "success"
+
+        print("no available doctor for patient ", paciente["id"], ", adding to waitlist")    
+        lista_filaespera.append({ #Se não encontrar - adiciona paciente à fila de espera
+            "idPatient": paciente["id"],
+            "patientName": paciente["name"],
+            "illness": paciente["illness"],
+            "arrival": arrivalTime
+        })
+        print("current waitlist: ", lista_filaespera)
+        return "failure"
+
+    if daFilaDeEspera:
+        for m in lista_medicos:
+            if m["specialty"] == paciente["illness"]:
+                    if not any(c for c in lista_consultas_atuais if c["idDoctor"] == m["id"]):
+                        lista_consultas_atuais.append({
+                            "idPatient": paciente["idPatient"],
+                            "patientName":paciente["patientName"],
+                            "idDoctor": m["id"],
+                            "doctorName": m["name"],
+                            "start": TEMPO_ATUAL_SIMULACAO,
+                            "arrival": arrivalTime,
+                            "end": TEMPO_ATUAL_SIMULACAO + round(numpy.random.normal(loc=TEMPO_MEDIO_CONSULTA, scale=7)),
+                            "illness": paciente["illness"]
+                        })
+                        print("accepted patient ", paciente["idPatient"], " with doctor ", m["id"])
+                        print("current consultations: ", lista_consultas_atuais)
+                        return "success"
+        return "failure"
+
+
+def chegada_paciente(): #Quando chega um paciente, verifica se há vaga direta ou vai para a fila de espera
+    global TEMPO_ATUAL_SIMULACAO, lista_filachegada, lista_pacientes, lista_filaespera
+    now = TEMPO_ATUAL_SIMULACAO
+    if len(lista_pacientes) == 0:
+        return
+    lista_filachegada.append({
+        "idPatient": lista_pacientes[0]["id"],
+        "arrival": now
+    })
+    
+    if len(lista_filaespera) == 0:
+        tentar_aceitar_paciente(lista_pacientes[0], now, False)
+    else:
+        print("patient ", lista_pacientes[0]["id"], " added to waitlist")
+        lista_filaespera.append({
+            "idPatient": lista_pacientes[0]["id"],
+            "patientName": lista_pacientes[0]["name"],
+            "illness": lista_pacientes[0]["illness"],
+            "arrival": now
+        })
+        print("current waitlist: ", lista_filaespera)
+
+    lista_pacientes = lista_pacientes[1:]
+    
+
+def admitir_paciente():
+    global TEMPO_ATUAL_SIMULACAO, lista_consultas_atuais, lista_filaespera
+    if len(lista_filaespera) == 0:
+        return
+    for paciente in lista_filaespera:
+        accepted = tentar_aceitar_paciente(paciente, paciente["arrival"], True)
+        if accepted == "success":
+            lista_filaespera.remove(paciente)
+
+
+def saida_paciente():
+    global TEMPO_ATUAL_SIMULACAO, lista_consultas_atuais, lista_historico_consultas
+    to_remove = []
+    for c in lista_consultas_atuais:
+        if c["end"] <= TEMPO_ATUAL_SIMULACAO:
+            for a in lista_filachegada:
+                if a["idPatient"] == c["idPatient"]:
+                    lista_historico_consultas.append({
+                        "idPatient": c["idPatient"],
+                        "idDoctor": c["idDoctor"],
+                        "arrival": c["arrival"],
+                        "start": c["start"],
+                        "exit": c["end"],
+                        "duration": c["end"] - c["start"],
+                        "illness": c["illness"]
+                    })
+                    to_remove.append(c)
+    for c in to_remove:
+        lista_consultas_atuais.remove(c)
+
+
+#####################################################################################################################
+############################################### INTERFACE GRÁFICA ###################################################
+#####################################################################################################################
+
+sg.theme("DarkBlack1")
+
+# Dados
+dados_fila = []
+dados_chegadas = []
+dados_consultorio = []
+
+
+def formatar_duracao(segundos_reais): #Converter segundos reais em MM:SS de tempo de simulação; 1 s = 10 min
+    minutos_simulacao = segundos_reais * 10
+    minutos = int(minutos_simulacao)
+    segundos = int((minutos_simulacao - minutos) * 60)
+    return f"{minutos:02d}:{segundos:02d}"
+
+
+def formatar_tempo(real_seconds): #Converter segundos reais desde o início da simulação para HH:MM (simulação começa às 08:00)
+    sim_minutes = real_seconds * 10 
+    total_minutes = int(sim_minutes)
+    hours = 8 + (total_minutes // 60)
+    minutes = total_minutes % 60
+    return f"{hours:02d}:{minutes:02d}"
+
+
+# JANELA DE ATUTENTIFICAÇÃO
+
+layout_autenticacao = [
+    [sg.Text("Autenticação", font=("Helvetica", 20), justification="center")],
+    [sg.Text("Introduza os seus dados para realizar uma Simulação")],
+    [sg.Text("", size=(1,1))], 
+    [sg.Text("Login:", size=(10,1)), sg.Input(key='-LOGIN-')],
+    [sg.Text("Password:", size=(10,1)), sg.Input(password_char="*", key='-PASSWORD-')],
+    [sg.Text("", size=(1,1))], 
+    [sg.Button("Iniciar"), sg.Button("Sair")]
+]
+
+window_autenticacao = sg.Window(
+    "Autenticação", 
+    layout_autenticacao,
+    size=(500, 250),
+    element_justification="center"
+)
+
+
+# TABELAS E JANELA DA SIMULAÇÃO
+
+tabela_chegadas = [
+    [sg.Text("Chegadas", font=("Helvetica", 12, "bold"), justification="center")],
+    [sg.Table(
+        values=dados_chegadas,
+        headings=["Hora", "ID"],
+        auto_size_columns=False,
+        col_widths=[10, 10],
+        justification="center",
+        num_rows=14,
+        key="-CHEGADAS-",
+        row_height=25
+    )]
+]
+
+tabela_fila = [
+    [sg.Text("Fila de Espera", font=("Helvetica", 12, "bold"), justification="center")],
+    [sg.Table(
+        values=dados_fila,
+        headings=["Hora", "ID","Doença"],
+        auto_size_columns=False,
+        col_widths=[10, 10,12],
+        justification="center",
+        num_rows=14,
+        key="-FILA-",
+        row_height=25
+    )]
+]
+
+
+tabela_consultorio = [
+    [sg.Text("Estado do Consultório", font=("Helvetica", 14, "bold"), 
+             justification="center", text_color="#4CAF50")],
+    [sg.Table(
+        values=estado_consultorio(),
+        headings=["Médico", "ID", "Paciente", "Início", "Especialidade"],
+        auto_size_columns=False,
+        col_widths=[15, 8, 16, 10, 15],
+        justification="center",
+        num_rows=14,
+        key="-CONSULTORIO-",
+        row_height=25,
+        alternating_row_color="#1a1a1a",
+        background_color="#0d0d0d",
+        row_colors=[]
+    )]
+]
+
+
+linha_botoes = [
+    sg.Button("Executar Simulação", size=(18, 2), key="-RUN-"),
+    sg.Button("Estatísticas", size=(18, 2), key="-EST-"),
+    sg.Button("Gráficos", size=(18, 2)),
+]
+
+
+layout_simulacao = [
+    [sg.Column(tabela_chegadas),
+     sg.Column(tabela_fila),
+     sg.Column(tabela_consultorio)],
+     [sg.Text("", size=(1, 1))],
+    linha_botoes
+]
+
+window_simulacao = sg.Window(
+    "Resultado da Simulação",
+    layout_simulacao,
+    size=(1250, 550),
+    element_justification="center"
+)
+
+
+# JANELA PARAMETROS 
+
+def criar_layout_params():
+    return [
+        [sg.Text("Definir Parâmetros Iniciais da Simulação")],
+        [sg.Text("Tempo de simulação:"), sg.Input(key='-TEMPO-')],
+        [sg.Text("Taxa de chegada de pacientes:"), sg.Input(key='-TAXA-')],
+        [sg.Text("Médicos disponíveis:"), sg.Input(key='-MEDICOS-')],
+        [sg.Text("Tempo médio de consulta:"), sg.Input(key='-CONSULTA-')],
+        [sg.Text("Tipo de distribuição:"), sg.Combo(["Exponencial", "Uniforme", "Normal"], default_value="Exponencial", key='-DIST-', readonly=True)],
+        [sg.Button("Definir"), sg.Button("Sair")]
+    ]
+
+def abrir_janela_parametros():
+    window_parametros = sg.Window(
+            "Parâmetros da Simulação",
+            criar_layout_params(),
+            size=(500, 250),
+            modal=True,
+            finalize=True
+        )
+
+    while True:
+        ev, vals = window_parametros.read()
+        if ev in (sg.WIN_CLOSED, "Sair"):
+            window_parametros.close()
+            break
+
+        if ev == "Definir":
+            global DURACAO_SIMULACAO, TAXA_CHEGADA, NUM_MEDICOS, TEMPO_MEDIO_CONSULTA, DISTRIBUICAO_TEMPO_CONSULTA, SIMULATION_RUNNING, TEMPO_ATUAL_SIMULACAO, NEXT_ARRIVAL
+            try:
+                # Converter valores da janela
+                DURACAO_SIMULACAO = int(vals['-TEMPO-'])
+                TAXA_CHEGADA = int(vals['-TAXA-'])
+                NUM_MEDICOS = int(vals['-MEDICOS-'])
+                TEMPO_MEDIO_CONSULTA = int(vals['-CONSULTA-'])
+
+                # Distribuição
+                dist = vals['-DIST-']
+                if dist == "Exponencial":
+                    DISTRIBUICAO_TEMPO_CONSULTA = "exponential"
+                elif dist == "Uniforme":
+                    DISTRIBUICAO_TEMPO_CONSULTA = "uniform"
+                else:
+                    DISTRIBUICAO_TEMPO_CONSULTA = "normal"
+
+                INICIO_SIMULACAO = time.time()
+                TEMPO_ATUAL_SIMULACAO = INICIO_SIMULACAO
+                NEXT_ARRIVAL = INICIO_SIMULACAO
+                SIMULATION_RUNNING = True
+                reset_simulacao()
+
+                window_parametros.close()
+                break
+
+            except ValueError:
+                sg.popup("Erro! Todos os valores devem ser preenchidos e ser números válidos.")
+
+# JANELA ESTATISTICA
+
+def criar_layout_estatisticas():
+    return [
+        [sg.Text("Estatísticas", font=("Helvetica", 14, "bold"))],
+        [sg.Text("Tempo médio de espera:"), sg.Text("", key='-EST_ESPERA-')],
+        [sg.Text("Tempo médio de consulta:"), sg.Text("", key='-EST_CONSULTA-')],
+        [sg.Text("Tempo médio na clínica:"), sg.Text("", key='-EST_CLINICA-')],
+        [sg.Text("Tamanho médio da fila:"), sg.Text("", key='-EST_FILA_MEDIA-')],
+        [sg.Text("Tamanho máximo da fila:"), sg.Text("", key='-EST_FILA_MAX-')],
+        [sg.Text("Ocupação dos médicos:"), sg.Text("", key='-EST_OCUPACAO-')],
+        [sg.Text("Pacientes atendidos:"), sg.Text("", key='-EST_ATENDIDOS-')],
+
+        [sg.Button("Fechar")]
+    ]
+
+
+def abrir_janela_estatisticas():
+    window_estatisticas = sg.Window(
+        "Estatísticas",
+        criar_layout_estatisticas(),
+        size=(300, 300),
+        modal=True,
+        finalize=True
+    )
+
+    window_estatisticas["-EST_ESPERA-"].update(f"{tempoespera_media:.0f} min")
+    window_estatisticas["-EST_CONSULTA-"].update(f"{tempoconsulta_media:.0f} min")
+    window_estatisticas["-EST_CLINICA-"].update(f"{tempoclinica_media:.0f} min")
+    window_estatisticas["-EST_FILA_MEDIA-"].update(f"{fila_media:.0f} pessoas")
+    window_estatisticas["-EST_FILA_MAX-"].update(f"{fila_maxima} pessoas")
+    window_estatisticas["-EST_OCUPACAO-"].update(f"{ocupacaomedico_media:.0f} %")
+    window_estatisticas["-EST_ATENDIDOS-"].update(f"{pacientes_atendidos} pessoas")
+
+    while True:
+        event, _ = window_estatisticas.read()
+        if event in (sg.WIN_CLOSED, "Fechar"):
+            break
+
+    window_estatisticas.close()
+
+
+# JANELA GRAFICOS
+
+def desenhar_grafico(canvas, figure):
+    agg = FigureCanvasTkAgg(figure, canvas)
+    agg.draw()
+    agg.get_tk_widget().pack(side='top', fill='both', expand=1)
+    return agg
+
+def grafico_filaespera(historico_fila):
+    fig, ax = plt.subplots(figsize=(4, 4))
+    
+    if not historico_fila:
+        ax.text(0.5, 0.5, 'Sem dados disponíveis', ha='center', va='center', fontsize=12)
+        ax.set_xlim(0, 1)
+        ax.set_ylim(0, 1)
+    else:
+        tempos = [0]
+        tamanhos = [0]
+        tempo_acumulado = 0
+        for size, duracao in historico_fila:
+            tempo_acumulado += duracao
+            tempos.append(tempo_acumulado * 10) 
+            tamanhos.append(size)
+        
+        ax.step(tempos, tamanhos, where='post', linewidth=2, color='#FF6B6B')
+        ax.fill_between(tempos, tamanhos, step='post', alpha=0.3, color='#FF6B6B')
+        ax.set_xlabel('Tempo (minutos)')
+        ax.set_ylabel('Tamanho da Fila')
+        ax.set_title('Fila de Espera')
+        ax.grid(True, linestyle='--', alpha=0.3)
+    
+    fig.tight_layout()
+    return fig
+
+def grafico_ocupacaomedicos():
+    fig, ax = plt.subplots(figsize=(4, 4))
+    
+    if len(ocupacaomedico_portempo) == 0:
+        ax.text(0.5, 0.5, 'Sem dados disponíveis', ha='center', va='center', fontsize=12)
+        ax.set_xlim(0, 1)
+        ax.set_ylim(0, 1)
+    else:
+        duracao_simulacao = max(i[0] for i in ocupacaomedico_portempo) - min(i[0] for i in ocupacaomedico_portempo)
+        num_pontos = int(duracao_simulacao) + 1
+        tempo_pontos = []
+        percentagem_ocupacao = []
+        
+        for i in ocupacaomedico_portempo:
+            percentagem_ocupacao.append((i[1] / len(lista_medicos)) * 100)
+            tempo_pontos.append(i[0] * ESCALA_TEMPO)  # Converte para minutos
+        
+        ax.plot(tempo_pontos, percentagem_ocupacao, linewidth=2, color='#4ECDC4', marker='o', markersize=3)
+        ax.fill_between(tempo_pontos, percentagem_ocupacao, alpha=0.3, color='#4ECDC4')
+        ax.set_xlabel('Tempo (minutos)')
+        ax.set_ylabel('Ocupação (%)')
+        ax.set_title('Ocupação dos Médicos')
+        ax.set_ylim(0, 105)
+        ax.grid(True, linestyle='--', alpha=0.3)
+    
+    fig.tight_layout()
+    return fig
+
+def grafico_consultasespecialidade():
+    fig, ax = plt.subplots(figsize=(4, 4))
+
+    if not lista_historico_consultas:
+        ax.text(0.5, 0.5, 'Sem dados disponíveis',
+                ha='center', va='center', fontsize=12)
+        ax.set_xlim(0, 1)
+        ax.set_ylim(0, 1)
+        ax.axis('off')
+        fig.tight_layout()
+        return fig
+
+    # Contar consultas por especialidade
+    contagem = {}
+    for c in lista_historico_consultas:
+        esp = c.get("illness", "Desconhecida")
+        contagem[esp] = contagem.get(esp, 0) + 1
+
+    especialidades = list(contagem.keys())
+    valores = list(contagem.values())
+
+    # Gráfico de barras
+    ax.bar(especialidades, valores)
+
+    ax.set_title("Consultas por Especialidade")
+    ax.set_ylabel("Nº de Consultas")
+    ax.set_xlabel("Especialidade")
+
+    ax.grid(axis='y', linestyle='--', alpha=0.3)
+    plt.xticks(rotation=30, ha='right')
+
+    fig.tight_layout()
+    return fig
+
+
+def abrir_janela_graficos(historico_fila, historico, medicos):
+    layout = [
+        [sg.Text("Gráficos da Simulação", font=("Helvetica", 14, "bold"),
+                 justification="center", expand_x=True)],
+        [sg.Canvas(key='-CANVAS1-', size=(250,250)),
+         sg.Canvas(key='-CANVAS2-', size=(250,250)),
+         sg.Canvas(key='-CANVAS3-', size=(250,250))],
+        [sg.Button("Fechar")]
+    ]
+    
+    window = sg.Window("Gráficos da Simulação", layout,
+                       finalize=True, resizable=True)
+    
+    fig1 = grafico_filaespera(historico_fila)
+    fig2 = grafico_ocupacaomedicos()
+    fig3 = grafico_consultasespecialidade()
+    
+    desenhar_grafico(window['-CANVAS1-'].TKCanvas, fig1)
+    desenhar_grafico(window['-CANVAS2-'].TKCanvas, fig2)
+    desenhar_grafico(window['-CANVAS3-'].TKCanvas, fig3)
+    
+    while True:
+        event, _ = window.read()
+        if event in (sg.WIN_CLOSED, "Fechar"):
+            break
+    
+    window.close()
+    plt.close('all')
+
+
+def main_loop(): 
+    global INICIO_SIMULACAO, SIMULATION_RUNNING, TEMPO_ATUAL_SIMULACAO,DURACAO_SIMULACAO, NEXT_ARRIVAL, NUM_MEDICOS, lista_medicos, UNCHANGED_MEDICOS
+    simulation_end = INICIO_SIMULACAO + DURACAO_SIMULACAO/ESCALA_TEMPO
+    now = time.time()
+    TEMPO_ATUAL_SIMULACAO = now
+    elapsed = TEMPO_ATUAL_SIMULACAO - INICIO_SIMULACAO
+    if TEMPO_ATUAL_SIMULACAO < simulation_end:
+        saida_paciente()
+        admitir_paciente()
+        if TEMPO_ATUAL_SIMULACAO > NEXT_ARRIVAL:
+            chegada_paciente()
+            NEXT_ARRIVAL = TEMPO_ATUAL_SIMULACAO + calcular_proxima_chegada(DISTRIBUICAO_TEMPO_CONSULTA)
+
+        window_simulacao["-CHEGADAS-"].update(values=[[formatar_tempo((val["arrival"] - INICIO_SIMULACAO)), val["idPatient"]] for val in lista_filachegada])
+        window_simulacao["-FILA-"].update(values=[[formatar_tempo((val["arrival"] - INICIO_SIMULACAO)), val["idPatient"], val["illness"]] for val in lista_filaespera])
+        window_simulacao["-CONSULTORIO-"].update(
+            values=[
+                [
+                    val["doctorName"],
+                    val["idPatient"],
+                    val["patientName"],
+                    formatar_tempo(val["start"] - INICIO_SIMULACAO)
+                        if is_number(val["start"]) else "",
+                    val["illness"],
+                ]
+                for val in estado_consultorio()
+            ],
+            row_colors=definir_cor_linhas()
+        )
+        calc_filaespera()
+        calc_consultas()
+        calc_OM2()
+    else:
+        SIMULATION_RUNNING = False
+        print("Simulation ended.", TEMPO_ATUAL_SIMULACAO - INICIO_SIMULACAO)
+
+
+#Loop autentificação
+
+autenticado = False
+
+while True:
+    event, values = window_autenticacao.read()
+    
+    if event in (sg.WIN_CLOSED, "Sair"):
+        window_autenticacao.close()
+        exit() 
+    
+    if event == "Iniciar":
+        login = values['-LOGIN-']
+        password = values['-PASSWORD-']
+        
+        if login == USERNAME_CORRETO and password == PASSWORD_CORRETO:
+            sg.popup("Login bem-sucedido!", title="Sucesso", auto_close=True, auto_close_duration=1)
+            window_autenticacao.close()
+            autenticado = True
+            break 
+        else:
+            sg.popup("Erro! Dados incorretos.", title="Erro")
+
+if not autenticado:
+    exit()
+
+
+# Loop simulação
+while True:
+
+    timeout = 100 if SIMULATION_RUNNING else None
+    event, values = window_simulacao.read(timeout=timeout)
+    if event in (sg.WIN_CLOSED,):
+        break
+
+    if SIMULATION_RUNNING:
+        main_loop()
+
+    if event == "-RUN-":
+        abrir_janela_parametros()
+
+    if event == "-EST-":
+        abrir_janela_estatisticas()
+
+    if event == "Gráficos":
+        abrir_janela_graficos(fila_historico, lista_historico_consultas, lista_medicos)
+
+
+window_simulacao.close()
