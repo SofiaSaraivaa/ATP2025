@@ -1,0 +1,4 @@
+Martim Rocha | 01| 18.0 | 19.0 | 17.0
+Maria Rodrigues | 02| 17.0 | 19.0 | 20.0
+Simão Freitas | 03| 19.0 | 17.0 | 16.0
+Sofia Correia | 04| 19.0 | 19.0 | 19.0
