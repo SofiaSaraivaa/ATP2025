@@ -1,1 +1,175 @@
+# Funcionalidades Tabela Meteorologia
 
+def temperaturas_medias(tabela):
+    resultado = []
+    for registo in tabela:
+        data = registo[0]
+        media = (registo[1] + registo[2]) / 2
+        resultado.append((data, media))
+    return resultado
+
+
+def guardar_dados_meteo(tabela, nome_ficheiro):
+    with open(nome_ficheiro, "w", encoding="utf-8") as f:
+        for data, tmin, tmax, chuva in tabela:
+            linha = f"{data[0]}::{data[1]}::{data[2]}::{tmin}::{tmax}::{chuva}\n"
+            f.write(linha)
+    return "Ficheiro guardado com sucesso!"
+
+
+def carregar_dados_meteo(nome_ficheiro):
+    tabela = []
+    with open(nome_ficheiro, encoding="utf-8") as f:
+        for linha in f:
+            if linha.strip() != "":
+                campos = linha.strip().split("::")
+                data = (int(campos[0]), int(campos[1]), int(campos[2]))
+                tabela.append((data,
+                               float(campos[3]),
+                               float(campos[4]),
+                               float(campos[5])))
+    return tabela
+
+
+def temperatura_minima_absoluta(tabela):
+    minimo = tabela[0][1]
+    for _, tmin, _, _ in tabela[1:]:
+        if tmin < minimo:
+            minimo = tmin
+    return minimo
+
+
+def amplitude_termica_diaria(tabela):
+    resultado = []
+    for data, tmin, tmax, _ in tabela:
+        amplitude = tmax - tmin
+        resultado.append((data, amplitude))
+    return resultado
+
+
+def dia_com_mais_chuva(tabela):
+    maior_prec = tabela[0][3]
+    dia_maior = tabela[0][0]
+
+    for data, _, _, precip in tabela[1:]:
+        if precip > maior_prec:
+            maior_prec = precip
+            dia_maior = data
+
+    return (dia_maior, maior_prec)
+
+
+def dias_acima_precipitacao(tabela):
+    limite = float(input("Insere o valor de p: "))
+    resultado = []
+
+    for data, _, _, precip in tabela:
+        if precip > limite:
+            resultado.append((data, precip))
+
+    return resultado
+
+
+def maior_periodo_seco(tabela):
+    limite = float(input("Insere o valor de p: "))
+    atual = 0
+    maximo = 0
+
+    for _, _, _, precip in tabela:
+        if precip < limite:
+            atual += 1
+            if atual > maximo:
+                maximo = atual
+        else:
+            atual = 0
+
+    return maximo
+
+
+def mostrar_graficos(tabela):
+    import matplotlib.pyplot as plt
+
+    dias = []
+    tmin = []
+    tmax = []
+
+    for data, minimo, maximo, _ in tabela:
+        dias.append(str(data))
+        tmin.append(minimo)
+        tmax.append(maximo)
+
+    plt.plot(dias, tmin, label="Temperatura mínima", marker="o")
+    plt.plot(dias, tmax, label="Temperatura máxima", marker="o")
+    plt.xlabel("Data")
+    plt.ylabel("Temperatura (ºC)")
+    plt.title("Temperaturas mínimas e máximas")
+    plt.legend()
+    plt.show()
+
+    chuva = []
+    for data, _, _, precip in tabela:
+        chuva.append(precip)
+
+    plt.plot(dias, chuva, label="Precipitação")
+    plt.xlabel("Data")
+    plt.ylabel("Pluviosidade")
+    plt.title("Precipitação diária")
+    plt.legend()
+    plt.show()
+
+
+
+def mostrar_menu():
+    print("""
+    (1) Temperatura média diária
+    (2) Guardar dados em ficheiro
+    (3) Carregar dados de ficheiro
+    (4) Temperatura mínima registada
+    (5) Amplitude térmica diária
+    (6) Dia com maior precipitação
+    (7) Dias com precipitação acima de p
+    (8) Maior período consecutivo com precipitação abaixo de p
+    (9) Gráficos
+    (0) Sair
+    """)
+
+
+def main():
+    tabela_meteo = [
+        ((2022, 1, 20), 2, 16, 0),
+        ((2022, 1, 21), 1, 13, 20),
+        ((2022, 1, 22), 7, 17, 30)
+    ]
+
+    mostrar_menu()
+    opcao = int(input("Escolhe uma opção: "))
+
+    while opcao != 0:
+        if opcao == 1:
+            print(temperaturas_medias(tabela_meteo))
+        elif opcao == 2:
+            print(guardar_dados_meteo(tabela_meteo, "meteorologia.txt"))
+        elif opcao == 3:
+            tabela_meteo = carregar_dados_meteo("meteorologia.txt")
+            print(tabela_meteo)
+        elif opcao == 4:
+            print(temperatura_minima_absoluta(tabela_meteo))
+        elif opcao == 5:
+            print(amplitude_termica_diaria(tabela_meteo))
+        elif opcao == 6:
+            print(dia_com_mais_chuva(tabela_meteo))
+        elif opcao == 7:
+            print(dias_acima_precipitacao(tabela_meteo))
+        elif opcao == 8:
+            print(maior_periodo_seco(tabela_meteo))
+        elif opcao == 9:
+            mostrar_graficos(tabela_meteo)
+
+        input("Pressiona Enter para voltar ao menu")
+        mostrar_menu()
+        opcao = int(input("Escolhe uma opção: "))
+
+    print("Obrigada, volte sempre.")
+
+
+main()
