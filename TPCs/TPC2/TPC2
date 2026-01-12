@@ -1,1 +1,51 @@
+import random
 
+def useradvinha():
+    min = 0
+    max = 100
+    x = random.randint(min,max)
+    print ("Tenta adinhar o meu número.")
+    y = int(input("tenta advinhar o meu número"))
+
+    while y != x:
+        if x > y:
+            print ("O número é maior")
+            y = int(input("tenta advinhar o meu número"))
+        if x < y:
+            print("O número é menor")
+            y = int(input("tenta advinhar o meu número"))
+    else:
+        print ("Ganhaste!")
+
+def computadoradvinha():
+    print("Pensa num número.")
+    min = 0
+    max = 100
+    tentativa = random.randint(min,max)
+    x = input(f"O teu número é {tentativa}?")
+    while x != "acertaste": 
+        if x == "maior": 
+            min = tentativa + 1
+            tentativa = random.randint(min,max)
+            x = input(f"O teu número é {tentativa}?")
+        if x == "menor":
+            max = tentativa - 1
+            tentativa = random.randint(min,max)
+            x = input(f"O teu número é {tentativa}?")
+    else: 
+        print("Ganhei!")      
+
+
+def modo(): 
+    print("Olá! Este jogo tem duas modalides.")
+    print("Na primeira, o computador gera um número entre 0 e 100 e tu advinhas.")
+    print("Na segunda, tu pensas num número entre 0 e 100 e o computador tenta adivnhar.")
+    x = int(input("Escolhe entre a modalidade 1 e 2"))
+    if x == 1:
+        useradvinha()
+    elif x == 2:
+        computadoradvinha()
+    else: 
+        print("Essa modalidade não existe.")
+    
+modo()
