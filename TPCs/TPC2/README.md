@@ -25,3 +25,4 @@ O jogo possui **duas modalidades**, permitindo tanto ao utilizador como ao compu
   - `menor` → se o número pensado for menor
   - `acertaste` → se o computador acertar
 - O jogo termina quando o computador acerta.
+
