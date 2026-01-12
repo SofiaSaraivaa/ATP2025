@@ -4,7 +4,7 @@
 # Aplicação para Gerir um Cinema
 
 Este tpc permite **gerir um cinema**, controlando os filmes em exibição, os lugares disponíveis e a venda de bilhetes.  
----
+
 
 ## Funcionalidades
 
