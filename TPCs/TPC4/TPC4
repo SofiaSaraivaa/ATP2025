@@ -1,3 +1,7 @@
+#Aplicação para gerir um cinema 
+
+cinema1 = [[150, [1, 2, 3], "Twilight"], [200, [46], "Hannibal"]]
+
 def listar(cinema):
     print("Os filmes que temos em exibição são:")
     for sala in cinema: 
