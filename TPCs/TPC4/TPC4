@@ -1,1 +1,87 @@
+def listar(cinema):
+    print("Os filmes que temos em exibição são:")
+    for sala in cinema: 
+        print(f"Filme: {sala[2]}, Lugares: {sala[0]}, Vendidos: {sala[1]}")
+    return
 
+def disponivel(cinema,filme,lugar):
+    for sala in cinema: 
+        if filme == sala[2]: 
+            if lugar in sala[1]:
+                return False 
+            else:
+                return True
+    return f"O filme '{filme}' não está em exibição."
+
+def vendebilhete(cinema,filme,lugar):
+    for sala in cinema: 
+        if filme == sala[2]: 
+            if lugar not in sala[1]:
+                sala[1].append(lugar)
+                print(f"Ocupou o lugar {lugar} no filme '{filme}' com sucesso!")
+                print(f"Filme: {sala[2]}, Lugares: {sala[0]}, Vendidos: {sala[1]}")
+                return
+            else:
+                print(f"O lugar {lugar} já está ocupado no filme '{filme}'.")
+                return
+    print(f"O filme '{filme}' não está em exibição.")
+
+def listardisponibilidades(cinema): 
+    print("O número de lugares ainda disponíveis em cada sessão são:")
+    for sala in cinema: 
+        total = sala[0]
+        ocupados = len(sala[1])
+        disponiveis = total - ocupados
+        print(f"Filme: {sala[2]}, Lugares disponíveis: {disponiveis}")
+    return
+
+def inserirsala(cinema,salanova): 
+    for sala in cinema: 
+        if sala[2] == salanova[2]:
+            print(f"A sala '{sala[2]}' já existe.")
+            return listar(cinema) 
+    cinema.append(salanova)
+    print(f"A sala '{salanova[2]}' foi adicionada com sucesso.")
+    return listar(cinema)
+
+
+def Menu(): 
+    print("Bem vindo ao Cinema! Como podemos ajudar hoje?")
+    print("1) Quero ver a lista de filmes disponíveis.")
+    print("2) Quero saber se um lugar está disponível.")
+    print("3) Quero comprar o bilhete para um filme.")
+    print("4) Quero saber quantos lugares ainda estão disponíveis num filme.") 
+    print("5) Quero adicionar um filme ao cinema.")
+    print("0) Não preciso de mais nada.")
+    x = int(input("Qual operação quer realizar?"))
+    cinema1 = [[150, [1, 2, 3], "Twilight"], [200, [46], "Hannibal"]]
+    while x != 0: 
+        if x == 1: 
+            listar(cinema1)
+        elif x == 2: 
+            filme1 = input("Qual o nome do filme?")
+            lugar1 = int(input("Qual o lugar da sala?"))
+            print(disponivel(cinema1, filme1, lugar1))
+        elif x == 3: 
+            filme1 = input("Qual o nome do filme?")
+            lugar1 = int(input("Qual o lugar da sala?"))
+            vendebilhete(cinema1, filme1, lugar1) 
+        elif x == 4: 
+            listardisponibilidades(cinema1)
+        elif x == 5: 
+            lugares1 = int(input("Quantos lugares tem a sala?"))
+            ocupados1 = []
+            filme1 = input("Qual o nome do filme?") 
+            salanova1 = [lugares1, ocupados1, filme1]
+            inserirsala(cinema1, salanova1)
+        print("Bem vindo ao Cinema! Como podemos ajudar hoje?")
+        print("1) Quero ver a lista de filmes disponíveis.")
+        print("2) Quero saber se um lugar está disponível.")
+        print("3) Quero comprar o bilhete para um filme.")
+        print("4) Quero saber quantos lugares ainda estão disponíveis num filme.") 
+        print("5) Quero adicionar um filme ao cinema.")
+        print("0) Não preciso de mais nada.")
+        x = int(input("Qual operação quer realizar?"))
+    print("Muito obrigada por ter vindo, até à próxima!")
+
+Menu()
